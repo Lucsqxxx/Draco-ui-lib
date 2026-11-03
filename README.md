@@ -75,10 +75,11 @@ local DracoUI = require(game.ReplicatedStorage.DracoUI)
 local window = DracoUI:CreateWindow({
     Title = "My Script",
     Subtitle = "Tools",
-    Theme = "Purple", -- Mono, Purple, Blue, or a theme table
+    Theme = "Purple", -- Mono, Purple, Blue, Light, Ocean, Crimson, AMOLED, or a table
     Size = UDim2.fromOffset(600, 420),
     ToggleKey = Enum.KeyCode.RightControl,
     Resizable = true,
+    Responsive = true,
 })
 local tab = window:CreateTab({ Name = "Main", Icon = "circle" })
 tab:CreateSection({ Name = "General", Icon = "settings" })
@@ -168,6 +169,7 @@ window:Notify({
     Title = "Status",
     Description = "Saved successfully.",
     Icon = "check",
+    Type = "success", -- info, success, warning, or error
     Duration = 3,
 })
 
@@ -185,7 +187,8 @@ GUI first.
 
 ## Themes
 
-Built-in themes are `Mono`, `Purple`, and `Blue`. Register a custom theme:
+Built-in themes are `Mono`, `Purple`, `Blue`, `Light`, `Ocean`, `Crimson`, and
+`AMOLED`. Register a custom theme:
 
 ```lua
 DracoUI:CreateTheme("Custom", {
@@ -196,7 +199,8 @@ local window = DracoUI:CreateWindow({ Theme = "Custom" })
 ```
 
 Theme fields include `Background`, `Accent`, `Text`, `Placeholder`, `Muted`,
-`Border`, `Divider`, `Field`, `Card`, `CardLine`, `Primary`, and `Radius`.
+`Border`, `Divider`, `Field`, `Card`, `CardLine`, `Primary`, `Focus`, `Glow`,
+`Shadow`, and `Radius`.
 
 ## Rebuilding the distribution
 
@@ -255,6 +259,9 @@ installed in a Roblox place, the application's frontend can be replaced with
   runtime smoke test, not actual rendering.
 - Theme changes apply to newly created windows; existing windows keep their
   colors to avoid rebuilding live controls.
+- Responsive mode scales the panel, clamps it to the viewport, and collapses
+  the sidebar automatically on compact screens. Set `Responsive = false` or
+  `StartCollapsed = true` to control that behavior explicitly.
 
 ## Troubleshooting remote loading
 

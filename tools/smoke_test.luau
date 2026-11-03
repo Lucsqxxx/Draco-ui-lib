@@ -100,6 +100,8 @@ local TweenInfo = { new = function(...) return { ... } end }
 
 local eventNames = {
     MouseEnter = true, MouseLeave = true, MouseButton1Click = true,
+    MouseButton1Down = true, MouseButton1Up = true, Focused = true,
+    SelectionGained = true, SelectionLost = true,
     InputBegan = true, InputChanged = true, InputEnded = true,
     FocusLost = true,
 }
