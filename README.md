@@ -13,9 +13,10 @@ collapsing, and optional resizing without including game automation logic.
 - `gethui()` is optional. When available, the library uses it; otherwise it
   uses `CoreGui`.
 
-Create a `ModuleScript` named `DracoUI` under `ReplicatedStorage` and copy the
-contents of `DracoUI.luau` into it. The complete example is in
-`examples/example.luau`.
+For standard Roblox development, create a `ModuleScript` named `DracoUI` under
+`ReplicatedStorage` and copy the contents of `DracoUI.luau` into it. The
+loadstring example is in `examples/example.luau`; the ModuleScript API is shown
+below.
 
 ## Loadstring distribution
 
