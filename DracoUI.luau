@@ -13,7 +13,7 @@ local LP = Players.LocalPlayer
 
 local DracoUI = {
     Name = "Draco UI Lib",
-    Version = "1.0.0",
+    Version = "1.1.0",
     IsDracoUI = true,
 }
 
@@ -169,7 +169,34 @@ DracoUI.Themes = {
     }),
 }
 
-local function resolveTheme(value)
+local function detectSystemTheme()
+    local detected
+    pcall(function()
+        local guiService = game:GetService("GuiService")
+        detected = guiService:GetAttribute("PreferredTheme")
+            or guiService:GetAttribute("Theme")
+    end)
+    pcall(function()
+        if detected then return end
+        local settings = UserSettings():GetService("UserGameSettings")
+        detected = settings:GetAttribute("PreferredTheme")
+            or settings:GetAttribute("Theme")
+    end)
+    if type(detected) == "string" then
+        local normalized = detected:lower()
+        if normalized:find("light", 1, true) then return "Light" end
+        if normalized:find("ocean", 1, true) then return "Ocean" end
+        if normalized:find("dark", 1, true) or normalized:find("amoled", 1, true) then
+            return "AMOLED"
+        end
+    end
+    return "Mono"
+end
+
+local function resolveTheme(value, systemValue)
+    if value == "System" or value == "Auto" then
+        value = systemValue or detectSystemTheme()
+    end
     if type(value) == "string" then
         return cloneTable(DracoUI.Themes[value] or DEFAULT_THEME)
     end
@@ -177,6 +204,31 @@ local function resolveTheme(value)
         return merge(DEFAULT_THEME, value)
     end
     return cloneTable(DEFAULT_THEME)
+end
+
+local THEME_COLOR_PROPERTIES = {
+    "BackgroundColor3", "TextColor3", "ImageColor3", "Color", "ScrollBarImageColor3",
+}
+
+local function applyTheme(root, previous, nextTheme)
+    local function visit(instance)
+        for _, property in ipairs(THEME_COLOR_PROPERTIES) do
+            local ok, current = pcall(function() return instance[property] end)
+            if ok then
+                for key, oldColor in pairs(previous) do
+                    local newColor = nextTheme[key]
+                    if newColor and current == oldColor then
+                        pcall(function() instance[property] = newColor end)
+                        break
+                    end
+                end
+            end
+        end
+        for _, child in ipairs(instance:GetChildren()) do
+            visit(child)
+        end
+    end
+    visit(root)
 end
 
 local ICON = {
@@ -263,7 +315,7 @@ local function textWidth(text, size, font)
     return math.ceil(width) + 1
 end
 
-local function tween(instance, duration, goal, style)
+local function playTween(instance, duration, goal, style)
     local animation = TweenService:Create(
         instance,
         TweenInfo.new(duration, style or Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
@@ -432,10 +484,10 @@ local function addFocusRing(instance, theme, lifecycle)
     }, instance)
     if lifecycle then
         lifecycle:Connect(instance.SelectionGained, function()
-            tween(ring, 0.12, { Transparency = 0.15 })
+            playTween(ring, 0.12, { Transparency = 0.15 })
         end)
         lifecycle:Connect(instance.SelectionLost, function()
-            tween(ring, 0.12, { Transparency = 1 })
+            playTween(ring, 0.12, { Transparency = 1 })
         end)
     end
     return ring
@@ -465,14 +517,49 @@ end
 local function createWindow(options)
     options = options or {}
     local lifecycle = makeLifecycle()
-    local theme = resolveTheme(options.Theme)
+    local persistenceEnabled = options.Persist == true
+        or options.Persistence == true
+        or type(options.Persistence) == "table"
+    local persistenceKey = tostring(options.PersistenceKey or options.GuiName or "Default")
+    local savedWindow
+    if persistenceEnabled and sharedState then
+        sharedState.Windows = sharedState.Windows or {}
+        savedWindow = sharedState.Windows[persistenceKey]
+        if type(savedWindow) ~= "table" then
+            savedWindow = { Values = {} }
+            sharedState.Windows[persistenceKey] = savedWindow
+        end
+    end
+    if type(options.Persistence) == "table" and type(options.Persistence.Load) == "function" then
+        local loaded, value = pcall(options.Persistence.Load, persistenceKey)
+        if loaded and type(value) == "table" then savedWindow = value end
+    end
+    local theme = resolveTheme(options.Theme or (savedWindow and savedWindow.Theme), options.SystemTheme)
+    local persistedValues = savedWindow and savedWindow.Values or {}
+    local function valueKey(controlOptions)
+        return tostring(controlOptions.Key or controlOptions.Name or controlOptions.Title or "")
+    end
+    local function readPersisted(controlOptions, fallback)
+        local value = persistedValues[valueKey(controlOptions)]
+        return value == nil and fallback or value
+    end
+    local function writePersisted(controlOptions, value)
+        if persistenceEnabled then persistedValues[valueKey(controlOptions)] = value end
+    end
     local camera = workspace.CurrentCamera
     local viewport = camera and camera.ViewportSize or Vector2.new(1000, 700)
     local density = math.clamp(viewport.Y / 1000 * 0.9, 0.7, 1.4)
     local function p(value)
         return px(density, value)
     end
+    local animationScale = (options.ReducedMotion or options.ReduceAnimations)
+        and 0
+        or math.clamp(tonumber(options.AnimationSpeed) or 1, 0, 3)
+    local function tween(instance, duration, goal, style)
+        return playTween(instance, duration * animationScale, goal, style)
+    end
     local compactViewport = viewport.X < 720 or viewport.Y < 480
+    local mobileDrawer = options.Responsive ~= false and compactViewport
 
     local fonts = {
         Regular = makeFont(p(13), false),
@@ -484,7 +571,8 @@ local function createWindow(options)
 
     local defaultWidth = math.min(p(760), math.max(p(320), viewport.X - p(24)))
     local defaultHeight = math.min(p(470), math.max(p(300), viewport.Y - p(24)))
-    local defaultSize = options.Size or UDim2.fromOffset(defaultWidth, defaultHeight)
+    local defaultSize = options.Size or (savedWindow and savedWindow.Size)
+        or UDim2.fromOffset(defaultWidth, defaultHeight)
     local minSize = options.MinSize or Vector2.new(p(320), p(300))
     local maxSize = options.MaxSize or Vector2.new(p(1200), p(800))
     local headerHeight = p(44)
@@ -572,6 +660,12 @@ local function createWindow(options)
         shadow.Size = window.Size
     end
     centerWindow()
+    if savedWindow and savedWindow.Position then
+        window.Position = savedWindow.Position
+        shadow.Position = UDim2.fromOffset(
+            window.Position.X.Offset + p(5), window.Position.Y.Offset + p(7)
+        )
+    end
     corner(window, p(theme.Radius))
     new("UIStroke", { Color = theme.Border, Thickness = 1 }, window)
     new("UIStroke", {
@@ -635,7 +729,7 @@ local function createWindow(options)
 
     local titleBlock = new("Frame", {
         Name = "TitleBlock",
-        Position = UDim2.fromOffset(sidebarPadding + p(4), p(7)),
+        Position = UDim2.fromOffset(mobileDrawer and p(42) or sidebarPadding + p(4), p(7)),
         Size = UDim2.fromOffset(p(220), headerHeight - p(12)),
         BackgroundTransparency = 1,
     }, topbar)
@@ -792,6 +886,7 @@ local function createWindow(options)
         Size = UDim2.new(0, sidebarWidth, 1, -headerHeight),
         BackgroundTransparency = 1,
         ClipsDescendants = true,
+        ZIndex = mobileDrawer and 16 or 1,
     }, window)
     local divider = new("Frame", {
         Name = "Divider",
@@ -836,9 +931,10 @@ local function createWindow(options)
         AutoButtonColor = false,
     }, sidebar)
     local searchFrame
+    local drawerScrim
     local function setCollapsed(value, animated)
         collapsed = value == true
-        local width = collapsed and sidebarNarrow or sidebarWidth
+        local width = mobileDrawer and sidebarWidth or (collapsed and sidebarNarrow or sidebarWidth)
         local function update(instance, goal)
             if animated then
                 tween(instance, 0.25, goal)
@@ -846,17 +942,30 @@ local function createWindow(options)
                 for key, item in pairs(goal) do instance[key] = item end
             end
         end
-        update(sidebar, { Size = UDim2.new(0, width, 1, -headerHeight) })
-        update(divider, { Position = UDim2.new(0, width, 0, headerHeight) })
-        update(content, {
-            Position = UDim2.fromOffset(width, headerHeight),
-            Size = UDim2.new(1, -width, 1, -headerHeight),
-        })
+        if mobileDrawer then
+            update(sidebar, {
+                Position = UDim2.fromOffset(collapsed and -sidebarWidth or 0, headerHeight),
+                Size = UDim2.new(0, sidebarWidth, 1, -headerHeight),
+            })
+            divider.Visible = false
+            update(content, {
+                Position = UDim2.fromOffset(0, headerHeight),
+                Size = UDim2.new(1, 0, 1, -headerHeight),
+            })
+        else
+            update(sidebar, { Size = UDim2.new(0, width, 1, -headerHeight) })
+            update(divider, { Position = UDim2.new(0, width, 0, headerHeight) })
+            update(content, {
+                Position = UDim2.fromOffset(width, headerHeight),
+                Size = UDim2.new(1, -width, 1, -headerHeight),
+            })
+        end
         update(collapseButton, {
-            Position = UDim2.fromOffset(width - sidebarPadding - p(24), p(10)),
+            Position = UDim2.fromOffset(sidebarWidth - sidebarPadding - p(24), p(10)),
         })
         collapseButton.Image = icon(collapsed and "chevron-right" or "chevron-left")
         if searchFrame then searchFrame.Visible = not collapsed end
+        if drawerScrim then drawerScrim.Visible = mobileDrawer and not collapsed end
         update(sideTitle, { TextTransparency = collapsed and 1 or 0 })
         for _, panel in pairs(panels) do
             for _, section in ipairs(panel.order) do
@@ -867,6 +976,32 @@ local function createWindow(options)
     lifecycle:Connect(collapseButton.MouseButton1Click, function()
         setCollapsed(not collapsed, true)
     end)
+    if mobileDrawer then
+        local menuButton = new("TextButton", {
+            Name = "Menu",
+            Position = UDim2.fromOffset(sidebarPadding, p(8)),
+            Size = UDim2.fromOffset(p(28), p(28)),
+            BackgroundColor3 = theme.ElementBackground,
+            BackgroundTransparency = 0.1,
+            AutoButtonColor = false,
+            Font = Enum.Font.GothamBold,
+            Text = "☰",
+            TextColor3 = theme.Text,
+            TextSize = p(16),
+            ZIndex = 3,
+        }, topbar)
+        corner(menuButton, p(6))
+        local menuFocus = addFocusRing(menuButton, theme, lifecycle)
+        lifecycle:Connect(menuButton.MouseEnter, function()
+            tween(menuFocus, 0.12, { Transparency = 0.35 })
+        end)
+        lifecycle:Connect(menuButton.MouseLeave, function()
+            tween(menuFocus, 0.12, { Transparency = 1 })
+        end)
+        lifecycle:Connect(menuButton.MouseButton1Click, function()
+            setCollapsed(not collapsed, true)
+        end)
+    end
     setCollapsed(collapsed, false)
 
     searchFrame = new("Frame", {
@@ -921,6 +1056,21 @@ local function createWindow(options)
         BackgroundTransparency = 1,
         ZIndex = 20,
     }, window)
+    if mobileDrawer then
+        drawerScrim = new("TextButton", {
+            Name = "DrawerScrim",
+            Size = UDim2.fromScale(1, 1),
+            BackgroundColor3 = theme.Shadow,
+            BackgroundTransparency = 0.45,
+            AutoButtonColor = false,
+            Text = "",
+            Visible = not collapsed,
+            ZIndex = 15,
+        }, window)
+        lifecycle:Connect(drawerScrim.MouseButton1Click, function()
+            setCollapsed(true, true)
+        end)
+    end
 
     local function makePanel(tabName)
         local panel = panels[tabName]
@@ -1247,7 +1397,7 @@ local function createWindow(options)
             ImageTransparency = 1,
         }, button)
         local component = makeComponent(lifecycle, rowFrame)
-        component.Value = optionsForToggle.Default
+        component.Value = readPersisted(optionsForToggle, optionsForToggle.Default)
         if component.Value == nil then component.Value = optionsForToggle.Value == true end
         local focusRing = addFocusRing(button, theme, lifecycle)
 
@@ -1258,6 +1408,7 @@ local function createWindow(options)
         end
         function component:Set(value)
             self.Value = value == true
+            writePersisted(optionsForToggle, self.Value)
             paint(0.15)
             safeCallback(optionsForToggle.Callback, self.Value)
         end
@@ -1303,7 +1454,7 @@ local function createWindow(options)
         increment = increment > 0 and increment or 1
         local decimals = decimalPlaces(increment)
         local suffix = optionsForSlider.Suffix or ""
-        local value = tonumber(optionsForSlider.Default or range.Default)
+        local value = tonumber(readPersisted(optionsForSlider, optionsForSlider.Default or range.Default))
             or tonumber(optionsForSlider.Value)
             or minimum
         local component = makeComponent(lifecycle, rowFrame)
@@ -1378,6 +1529,7 @@ local function createWindow(options)
             local nextValue = snap(number)
             local changed = nextValue ~= self.Value
             self.Value = nextValue
+            writePersisted(optionsForSlider, self.Value)
             paint(0.08)
             if changed then safeCallback(optionsForSlider.Callback, self.Value) end
         end
@@ -1448,7 +1600,10 @@ local function createWindow(options)
                 selected = value
             end
         end
-        setSelected(optionsForDropdown.Default ~= nil and optionsForDropdown.Default or optionsForDropdown.Value)
+        setSelected(readPersisted(
+            optionsForDropdown,
+            optionsForDropdown.Default ~= nil and optionsForDropdown.Default or optionsForDropdown.Value
+        ))
         if not multiple and selected == nil and optionsForDropdown.AllowNone ~= true then
             selected = component.Options[1]
         end
@@ -1664,6 +1819,7 @@ local function createWindow(options)
         function component:Select(value)
             setSelected(value)
             refresh()
+            writePersisted(optionsForDropdown, self.Value)
             safeCallback(optionsForDropdown.Callback, self.Value)
         end
         function component:Refresh(newOptions)
@@ -1676,6 +1832,7 @@ local function createWindow(options)
                 selected = self.Options[1]
             end
             refresh()
+            writePersisted(optionsForDropdown, self.Value)
         end
         function component:Get() return self.Value end
         return component
@@ -1700,7 +1857,9 @@ local function createWindow(options)
         local group = ensureGroup(tab)
         local rowFrame, slot = makeRow(group, title, normalizeDescription(optionsForInput), tags)
         local component = makeComponent(lifecycle, rowFrame)
-        component.Value = tostring(optionsForInput.Default or optionsForInput.Value or "")
+        component.Value = tostring(readPersisted(
+            optionsForInput, optionsForInput.Default or optionsForInput.Value or ""
+        ))
         local box = new("TextBox", merge(makeFont(p(12), false), {
             Name = "Input",
             Size = UDim2.fromOffset(p(optionsForInput.Width or 170), controlHeight),
@@ -1720,15 +1879,18 @@ local function createWindow(options)
         }, box)
         function component:Set(value, fire)
             self.Value = tostring(value or "")
+            writePersisted(optionsForInput, self.Value)
             box.Text = self.Value
             if fire ~= false then safeCallback(optionsForInput.Callback, self.Value) end
         end
         function component:Get() return self.Value end
         component:_Connect(box:GetPropertyChangedSignal("Text"), function()
             component.Value = box.Text
+            writePersisted(optionsForInput, component.Value)
         end)
         component:_Connect(box.FocusLost, function(enterPressed)
             component.Value = box.Text
+            writePersisted(optionsForInput, component.Value)
             if enterPressed or optionsForInput.FireOnFocusLost ~= false then
                 safeCallback(optionsForInput.Callback, component.Value)
             end
@@ -1753,7 +1915,7 @@ local function createWindow(options)
         local group = ensureGroup(tab)
         local rowFrame, slot = makeRow(group, title, normalizeDescription(optionsForKeybind), tags)
         local component = makeComponent(lifecycle, rowFrame)
-        component.Value = optionsForKeybind.Default or optionsForKeybind.Value
+        component.Value = readPersisted(optionsForKeybind, optionsForKeybind.Default or optionsForKeybind.Value)
         component.Picking = false
         local button = new("TextButton", {
             Name = "Keybind",
@@ -1782,6 +1944,7 @@ local function createWindow(options)
         end
         function component:Set(value, fire)
             self.Value = value
+            writePersisted(optionsForKeybind, self.Value)
             paint()
             if fire ~= false then safeCallback(optionsForKeybind.Callback, value) end
         end
@@ -1975,6 +2138,17 @@ local function createWindow(options)
     end
 
     local windowObject = { Gui = gui, Frame = window, Theme = theme, _Lifecycle = lifecycle }
+    local function savePersistence()
+        if not persistenceEnabled then return end
+        local snapshot = savedWindow or { Values = persistedValues }
+        snapshot.Size = window.Size
+        snapshot.Position = window.Position
+        snapshot.Theme = theme.Name
+        snapshot.Values = persistedValues
+        if type(options.Persistence) == "table" and type(options.Persistence.Save) == "function" then
+            pcall(options.Persistence.Save, snapshot)
+        end
+    end
     local function currentTabGroup(tab)
         return ensureGroup(tab)
     end
@@ -2063,9 +2237,10 @@ local function createWindow(options)
     end
 
     function windowObject:SetTheme(value)
-        -- Theme changes are supported for future windows. Existing instances
-        -- intentionally retain their current colors to avoid tearing down UI.
-        self.Theme = resolveTheme(value)
+        local nextTheme = resolveTheme(value, options.SystemTheme)
+        applyTheme(gui, theme, nextTheme)
+        theme = nextTheme
+        self.Theme = nextTheme
     end
 
     function windowObject:Show() setShown(true) end
@@ -2154,6 +2329,7 @@ local function createWindow(options)
     function windowObject:Tab(tabOptions) return self:CreateTab(tabOptions) end
     function windowObject:Section(sectionOptions) return self:CreateSection(sectionOptions) end
     function windowObject:Destroy()
+        savePersistence()
         lifecycle:Destroy()
         if DracoUI._ActiveWindow == self then
             DracoUI._ActiveWindow = nil

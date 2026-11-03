@@ -68,6 +68,11 @@ The distribution returns the same `DracoUI` table as `require(DracoUI)`. It
 does not fetch additional files, use `script` paths, or create a window while
 being loaded; a window is created only when `CreateWindow` is called.
 
+For a live theme-switching and responsive-layout demo, run
+`examples/theme_showcase.luau` in the same compatible environment.
+
+![Draco theme palette preview](docs/theme-preview.svg)
+
 ## Basic API
 
 ```lua
@@ -80,6 +85,8 @@ local window = DracoUI:CreateWindow({
     ToggleKey = Enum.KeyCode.RightControl,
     Resizable = true,
     Responsive = true,
+    Persist = true,
+    PersistenceKey = "MyWindow",
 })
 local tab = window:CreateTab({ Name = "Main", Icon = "circle" })
 tab:CreateSection({ Name = "General", Icon = "settings" })
@@ -181,6 +188,12 @@ window:SetUIScale(0.9)
 window:Destroy()
 ```
 
+Use `ReducedMotion = true`, `ReduceAnimations = true`, or
+`AnimationSpeed = 0.5` in `CreateWindow` when animation should be reduced.
+`Persist = true` remembers window size, position, theme, and control values
+between compatible reloads in the same client environment. For durable storage,
+provide `Persistence = { Load = function(key) ... end, Save = function(state) ... end }`.
+
 Destroying the window disconnects registered control/input connections and
 removes its GUI. Recreating a window with the same `GuiName` removes the old
 GUI first.
@@ -201,6 +214,11 @@ local window = DracoUI:CreateWindow({ Theme = "Custom" })
 Theme fields include `Background`, `Accent`, `Text`, `Placeholder`, `Muted`,
 `Border`, `Divider`, `Field`, `Card`, `CardLine`, `Primary`, `Focus`, `Glow`,
 `Shadow`, and `Radius`.
+
+Calling `window:SetTheme("Light")` or another built-in/custom theme updates the
+existing window immediately. `Theme = "System"` checks supported Roblox UI
+theme attributes and falls back to `Mono` when the runtime does not expose a
+system preference.
 
 ## Rebuilding the distribution
 
@@ -257,11 +275,12 @@ installed in a Roblox place, the application's frontend can be replaced with
 - Rendering, mouse/touch input, and Roblox instance behavior require an
   in-engine client test. The repository test covers parsing and a Roblox-shaped
   runtime smoke test, not actual rendering.
-- Theme changes apply to newly created windows; existing windows keep their
-  colors to avoid rebuilding live controls.
 - Responsive mode scales the panel, clamps it to the viewport, and collapses
   the sidebar automatically on compact screens. Set `Responsive = false` or
   `StartCollapsed = true` to control that behavior explicitly.
+- `docs/theme-preview.svg` is an illustrative palette board. Actual screenshots
+  and GIFs require a Roblox client/place; `examples/theme_showcase.luau` is the
+  executable visual preview.
 
 ## Troubleshooting remote loading
 
