@@ -239,8 +239,21 @@ local function resolveTheme(value, systemValue)
     return cloneTable(DEFAULT_THEME)
 end
 
-local THEME_COLOR_PROPERTIES = {
-    "BackgroundColor3", "TextColor3", "ImageColor3", "Color", "ScrollBarImageColor3",
+local THEME_KEYS_BY_PROPERTY = {
+    BackgroundColor3 = {
+        "Background", "Accent", "Dialog", "ElementBackground", "Field",
+        "RowHover", "RowActive", "Card", "Primary",
+    },
+    TextColor3 = { "Text", "Placeholder", "Muted", "Primary", "Background" },
+    ImageColor3 = {
+        "Primary", "Text", "Placeholder", "Muted", "Background",
+        "Success", "Warning", "Danger", "Focus",
+    },
+    Color = {
+        "Border", "Divider", "FieldLine", "CardLine", "RowLine",
+        "Primary", "Focus", "Glow", "Success", "Warning", "Danger",
+    },
+    ScrollBarImageColor3 = { "Placeholder", "Muted", "Primary", "Focus" },
 }
 
 local function applyTheme(root, previous, nextTheme)
@@ -255,12 +268,13 @@ local function applyTheme(root, previous, nextTheme)
         return okLeft and okRight and leftR == rightR and leftG == rightG and leftB == rightB
     end
     local function visit(instance)
-        for _, property in ipairs(THEME_COLOR_PROPERTIES) do
+        for property, keys in pairs(THEME_KEYS_BY_PROPERTY) do
             local ok, current = pcall(function() return instance[property] end)
             if ok then
-                for key, oldColor in pairs(previous) do
+                for _, key in ipairs(keys) do
+                    local oldColor = previous[key]
                     local newColor = nextTheme[key]
-                    if newColor and sameColor(current, oldColor) then
+                    if oldColor and newColor and sameColor(current, oldColor) then
                         pcall(function() instance[property] = newColor end)
                         break
                     end
@@ -2503,8 +2517,10 @@ function DracoUI:PresetSheet(tab, api)
 end
 
 function DracoUI:CreateTheme(name, values)
-    DracoUI.Themes[name] = merge(DEFAULT_THEME, values)
-    return DracoUI.Themes[name]
+    local theme = merge(DEFAULT_THEME, values)
+    theme.Name = tostring(name)
+    DracoUI.Themes[name] = theme
+    return theme
 end
 
 return DracoUI

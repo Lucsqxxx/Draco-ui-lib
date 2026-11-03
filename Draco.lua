@@ -1,7 +1,7 @@
 --!strict
 -- Draco UI Lib single-file distribution.
 -- Generated from DracoUI.luau; edit the source module instead.
--- Source SHA-256: f6c3c3a23a74027edd57d9f464b374e6e57edaf51694176b745c593443d239fa
+-- Source SHA-256: 38513f78e31ce99bb35a9dc6d275e16416f71516aa30965b388f8159ad8e946d
 -- Draco UI Lib
 -- A reusable glass-style Roblox UI library extracted from the Mono frontend.
 -- The module only owns UI concerns; callers own their feature/game logic.
@@ -242,8 +242,21 @@ local function resolveTheme(value, systemValue)
     return cloneTable(DEFAULT_THEME)
 end
 
-local THEME_COLOR_PROPERTIES = {
-    "BackgroundColor3", "TextColor3", "ImageColor3", "Color", "ScrollBarImageColor3",
+local THEME_KEYS_BY_PROPERTY = {
+    BackgroundColor3 = {
+        "Background", "Accent", "Dialog", "ElementBackground", "Field",
+        "RowHover", "RowActive", "Card", "Primary",
+    },
+    TextColor3 = { "Text", "Placeholder", "Muted", "Primary", "Background" },
+    ImageColor3 = {
+        "Primary", "Text", "Placeholder", "Muted", "Background",
+        "Success", "Warning", "Danger", "Focus",
+    },
+    Color = {
+        "Border", "Divider", "FieldLine", "CardLine", "RowLine",
+        "Primary", "Focus", "Glow", "Success", "Warning", "Danger",
+    },
+    ScrollBarImageColor3 = { "Placeholder", "Muted", "Primary", "Focus" },
 }
 
 local function applyTheme(root, previous, nextTheme)
@@ -258,12 +271,13 @@ local function applyTheme(root, previous, nextTheme)
         return okLeft and okRight and leftR == rightR and leftG == rightG and leftB == rightB
     end
     local function visit(instance)
-        for _, property in ipairs(THEME_COLOR_PROPERTIES) do
+        for property, keys in pairs(THEME_KEYS_BY_PROPERTY) do
             local ok, current = pcall(function() return instance[property] end)
             if ok then
-                for key, oldColor in pairs(previous) do
+                for _, key in ipairs(keys) do
+                    local oldColor = previous[key]
                     local newColor = nextTheme[key]
-                    if newColor and sameColor(current, oldColor) then
+                    if oldColor and newColor and sameColor(current, oldColor) then
                         pcall(function() instance[property] = newColor end)
                         break
                     end
@@ -2506,8 +2520,10 @@ function DracoUI:PresetSheet(tab, api)
 end
 
 function DracoUI:CreateTheme(name, values)
-    DracoUI.Themes[name] = merge(DEFAULT_THEME, values)
-    return DracoUI.Themes[name]
+    local theme = merge(DEFAULT_THEME, values)
+    theme.Name = tostring(name)
+    DracoUI.Themes[name] = theme
+    return theme
 end
 
 return DracoUI
