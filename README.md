@@ -71,6 +71,12 @@ being loaded; a window is created only when `CreateWindow` is called.
 For a live theme-switching and responsive-layout demo, run
 `examples/theme_showcase.luau` in the same compatible environment.
 
+For authorized movement testing in an experience you own, use the paired
+`examples/authorized_movement_server.server.luau` and
+`examples/authorized_movement_showcase.client.luau` scripts. The server script
+validates the player and clamps WalkSpeed; Fly and Noclip are only extension
+points and are not implemented as client-side exploit features.
+
 ![Draco theme palette preview](docs/theme-preview.svg)
 
 ## Basic API
