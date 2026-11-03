@@ -1,7 +1,7 @@
 --!strict
 -- Draco UI Lib single-file distribution.
 -- Generated from DracoUI.luau; edit the source module instead.
--- Source SHA-256: 5d825564c41771ecd6110eaf1054aaea1e6eafaf451e1cb9368860ad6be046f0
+-- Source SHA-256: f6c3c3a23a74027edd57d9f464b374e6e57edaf51694176b745c593443d239fa
 -- Draco UI Lib
 -- A reusable glass-style Roblox UI library extracted from the Mono frontend.
 -- The module only owns UI concerns; callers own their feature/game logic.
@@ -78,7 +78,7 @@ local DEFAULT_THEME = {
     RowLine = Color3.fromRGB(22, 22, 25),
     Primary = Color3.fromRGB(255, 255, 255),
     Focus = Color3.fromRGB(130, 190, 255),
-    Glow = Color3.fromRGB(255, 255, 255),
+    Glow = Color3.fromRGB(142, 142, 150),
     Shadow = Color3.fromRGB(0, 0, 0),
     Success = Color3.fromRGB(74, 222, 128),
     Warning = Color3.fromRGB(251, 191, 36),
@@ -90,14 +90,37 @@ DracoUI.Themes = {
     Mono = DEFAULT_THEME,
     Purple = merge(DEFAULT_THEME, {
         Name = "Purple",
+        Background = Color3.fromRGB(9, 6, 15),
+        Accent = Color3.fromRGB(29, 17, 44),
+        Dialog = Color3.fromRGB(16, 10, 25),
+        ElementBackground = Color3.fromRGB(34, 21, 51),
+        Card = Color3.fromRGB(14, 9, 22),
+        CardLine = Color3.fromRGB(52, 30, 75),
+        Border = Color3.fromRGB(58, 34, 82),
+        Divider = Color3.fromRGB(38, 23, 55),
+        Field = Color3.fromRGB(20, 12, 31),
+        RowActive = Color3.fromRGB(40, 24, 58),
+        RowLine = Color3.fromRGB(36, 21, 52),
         Primary = Color3.fromRGB(194, 145, 255),
-        Accent = Color3.fromRGB(24, 17, 34),
+        Focus = Color3.fromRGB(224, 195, 255),
+        Glow = Color3.fromRGB(128, 75, 190),
     }),
     Blue = merge(DEFAULT_THEME, {
         Name = "Blue",
+        Background = Color3.fromRGB(5, 10, 18),
+        Accent = Color3.fromRGB(10, 24, 40),
+        Dialog = Color3.fromRGB(9, 18, 31),
+        ElementBackground = Color3.fromRGB(17, 37, 58),
+        Card = Color3.fromRGB(7, 15, 26),
+        CardLine = Color3.fromRGB(27, 61, 91),
+        Border = Color3.fromRGB(33, 72, 105),
+        Divider = Color3.fromRGB(22, 49, 73),
+        Field = Color3.fromRGB(9, 24, 41),
+        RowActive = Color3.fromRGB(21, 48, 72),
+        RowLine = Color3.fromRGB(20, 44, 66),
         Primary = Color3.fromRGB(96, 180, 255),
         Focus = Color3.fromRGB(150, 215, 255),
-        Accent = Color3.fromRGB(12, 22, 34),
+        Glow = Color3.fromRGB(52, 135, 215),
     }),
     Light = merge(DEFAULT_THEME, {
         Name = "Light",
@@ -201,7 +224,17 @@ local function resolveTheme(value, systemValue)
         value = systemValue or detectSystemTheme()
     end
     if type(value) == "string" then
-        return cloneTable(DracoUI.Themes[value] or DEFAULT_THEME)
+        local theme = DracoUI.Themes[value]
+        if not theme then
+            local wanted = value:lower()
+            for name, candidate in pairs(DracoUI.Themes) do
+                if name:lower() == wanted then
+                    theme = candidate
+                    break
+                end
+            end
+        end
+        return cloneTable(theme or DEFAULT_THEME)
     end
     if type(value) == "table" then
         return merge(DEFAULT_THEME, value)
@@ -214,13 +247,23 @@ local THEME_COLOR_PROPERTIES = {
 }
 
 local function applyTheme(root, previous, nextTheme)
+    local function sameColor(left, right)
+        if left == right then return true end
+        local okLeft, leftR, leftG, leftB = pcall(function()
+            return left.R, left.G, left.B
+        end)
+        local okRight, rightR, rightG, rightB = pcall(function()
+            return right.R, right.G, right.B
+        end)
+        return okLeft and okRight and leftR == rightR and leftG == rightG and leftB == rightB
+    end
     local function visit(instance)
         for _, property in ipairs(THEME_COLOR_PROPERTIES) do
             local ok, current = pcall(function() return instance[property] end)
             if ok then
                 for key, oldColor in pairs(previous) do
                     local newColor = nextTheme[key]
-                    if newColor and current == oldColor then
+                    if newColor and sameColor(current, oldColor) then
                         pcall(function() instance[property] = newColor end)
                         break
                     end
@@ -629,21 +672,6 @@ local function createWindow(options)
     }, toastHolder)
     local toastNumber = 0
 
-    local shadow = new("Frame", {
-        Name = "Shadow",
-        Size = defaultSize,
-        BackgroundColor3 = theme.Shadow,
-        BackgroundTransparency = 0.55,
-        BorderSizePixel = 0,
-        ZIndex = 0,
-    }, gui)
-    corner(shadow, p(theme.Radius + 8))
-    new("UIStroke", {
-        Color = theme.Shadow,
-        Transparency = 0.35,
-        Thickness = p(8),
-    }, shadow)
-
     local window = new("Frame", {
         Name = "Window",
         Size = defaultSize,
@@ -659,15 +687,10 @@ local function createWindow(options)
             math.floor((viewport.Y - size.Y) / 2 + 0.5)
         )
         window.Position = position
-        shadow.Position = UDim2.fromOffset(position.X.Offset + p(5), position.Y.Offset + p(7))
-        shadow.Size = window.Size
     end
     centerWindow()
     if savedWindow and savedWindow.Position then
         window.Position = savedWindow.Position
-        shadow.Position = UDim2.fromOffset(
-            window.Position.X.Offset + p(5), window.Position.Y.Offset + p(7)
-        )
     end
     corner(window, p(theme.Radius))
     new("UIStroke", { Color = theme.Border, Thickness = 1 }, window)
@@ -677,9 +700,6 @@ local function createWindow(options)
         Thickness = p(2),
     }, window)
     local windowScale = new("UIScale", { Scale = userScale }, window)
-    lifecycle:Connect(window:GetPropertyChangedSignal("Size"), function()
-        shadow.Size = window.Size
-    end)
 
     local function scaledWindowPosition(element)
         local scale = windowScale.Scale
@@ -964,14 +984,14 @@ local function createWindow(options)
             })
         end
         update(collapseButton, {
-            Position = UDim2.fromOffset(sidebarWidth - sidebarPadding - p(24), p(10)),
+            Position = UDim2.fromOffset(width - sidebarPadding - p(24), p(10)),
         })
         collapseButton.Image = icon(collapsed and "chevron-right" or "chevron-left")
         if searchFrame then searchFrame.Visible = not collapsed end
         if drawerScrim then drawerScrim.Visible = mobileDrawer and not collapsed end
         update(sideTitle, { TextTransparency = collapsed and 1 or 0 })
         for _, panel in pairs(panels) do
-            for _, section in ipairs(panel.order) do
+            for _, section in ipairs(panel.Order or {}) do
                 update(section.Label, { TextTransparency = collapsed and 1 or 0 })
             end
         end
@@ -1046,7 +1066,7 @@ local function createWindow(options)
     local function applySearch()
         if not currentPanel then return end
         local query = searchBox.Text:lower()
-        for _, section in ipairs(currentPanel.order) do
+        for _, section in ipairs(currentPanel.Order or {}) do
             section.Row.Visible = query == ""
                 or section.Name:lower():find(query, 1, true) ~= nil
         end
@@ -1163,22 +1183,27 @@ local function createWindow(options)
         }, panel.Frame)
         corner(row, p(6))
         local image = new("ImageLabel", {
+            AnchorPoint = Vector2.new(0, 0.5),
             Position = UDim2.fromOffset(p(10), p(8)),
             Size = UDim2.fromOffset(p(15), p(15)),
             BackgroundTransparency = 1,
             Image = icon(optionsForSection.Icon or "circle"),
             ImageColor3 = optionsForSection.Color or theme.Primary,
         }, row)
+        image.Position = UDim2.fromOffset(p(10), p(16))
         local label = new("TextLabel", merge(makeFont(p(14), false), {
+            AnchorPoint = Vector2.new(0, 0.5),
             Position = UDim2.fromOffset(p(35), 0),
-            Size = UDim2.new(1, -p(35), 1, 0),
+            Size = UDim2.new(1, -p(35), 0, p(20)),
             BackgroundTransparency = 1,
             TextColor3 = theme.Placeholder,
             TextTransparency = collapsed and 1 or 0,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextTruncate = Enum.TextTruncate.AtEnd,
             Text = name,
+            TextYAlignment = Enum.TextYAlignment.Center,
         }), row)
+        label.Position = UDim2.fromOffset(p(35), p(16))
         local section = { Name = name, Row = row, Label = label, Icon = image, Panel = panel, Groups = {}, Order = {} }
         panel.Sections[name] = section
         table.insert(panel.Order, section)
