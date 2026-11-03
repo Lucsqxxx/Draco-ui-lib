@@ -17,6 +17,56 @@ Create a `ModuleScript` named `DracoUI` under `ReplicatedStorage` and copy the
 contents of `DracoUI.luau` into it. The complete example is in
 `examples/example.luau`.
 
+## Loadstring distribution
+
+`Draco.lua` is the generated, self-contained single-file distribution. In a
+client environment that explicitly provides both `game:HttpGet` and enabled
+`loadstring`, it can be loaded directly:
+
+```lua
+local URL = "https://raw.githubusercontent.com/Lucsqxxx/Draco-ui-lib/main/Draco.lua"
+local fetched, sourceOrError = pcall(function()
+    return game:HttpGet(URL)
+end)
+assert(fetched and type(sourceOrError) == "string" and #sourceOrError > 0,
+    "Draco download failed: " .. tostring(sourceOrError))
+
+local compile = loadstring
+assert(type(compile) == "function", "Draco requires an environment with loadstring enabled")
+
+local compiled, chunkOrError = pcall(compile, sourceOrError)
+assert(compiled and type(chunkOrError) == "function",
+    "Draco compilation failed: " .. tostring(chunkOrError))
+
+local initialized, DracoOrError = pcall(chunkOrError)
+assert(initialized and type(DracoOrError) == "table" and DracoOrError.IsDracoUI,
+    "Draco initialization failed: " .. tostring(DracoOrError))
+local Draco = DracoOrError
+
+local Window = Draco:CreateWindow({
+    Title = "Draco UI Lib",
+})
+```
+
+The shorter equivalent is:
+
+```lua
+local Draco = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Lucsqxxx/Draco-ui-lib/main/Draco.lua"
+))()
+local Window = Draco:CreateWindow({ Title = "Draco UI Lib" })
+```
+
+This is not supported by ordinary Roblox Studio by default: `loadstring` is
+disabled in normal client code, and HTTP access also depends on the runtime.
+Use the ModuleScript installation above for standard Roblox development. Only
+use the remote example in a permitted environment that explicitly supports the
+required APIs.
+
+The distribution returns the same `DracoUI` table as `require(DracoUI)`. It
+does not fetch additional files, use `script` paths, or create a window while
+being loaded; a window is created only when `CreateWindow` is called.
+
 ## Basic API
 
 ```lua
@@ -147,6 +197,39 @@ local window = DracoUI:CreateWindow({ Theme = "Custom" })
 Theme fields include `Background`, `Accent`, `Text`, `Placeholder`, `Muted`,
 `Border`, `Divider`, `Field`, `Card`, `CardLine`, `Primary`, and `Radius`.
 
+## Rebuilding the distribution
+
+Edit `DracoUI.luau`, then regenerate and verify the committed artifact:
+
+```bash
+python3 tools/build_distribution.py
+python3 tools/test_distribution.py --luau /path/to/luau
+```
+
+The build embeds a SHA-256 fingerprint of the source. The verifier fails when
+`Draco.lua` is missing or stale and checks that the distribution has no local
+`require`/`script` dependency, has the expected source fingerprint, and returns
+the public API. `test_distribution.py` also compiles the artifact and runs a
+Roblox-shaped Luau smoke test for loading, window creation, callbacks, and
+reload cleanup. The smoke test does not replace an in-engine Roblox test.
+
+After the checks pass, publish the generated artifact together with its source
+and tooling. From the repository root:
+
+```bash
+git add Draco.lua DracoUI.luau README.md tools
+git commit -m "feat: add loadstring distribution"
+git push origin main
+```
+
+Then verify the exact raw URL before sharing it:
+
+```bash
+curl --fail --location \
+  https://raw.githubusercontent.com/Lucsqxxx/Draco-ui-lib/main/Draco.lua \
+  >/dev/null
+```
+
 ## Relationship to the original script
 
 `idkMENU.luau` is an application entry point. It contains game-specific state,
@@ -167,6 +250,26 @@ installed in a Roblox place, the application's frontend can be replaced with
   loaded by a compatible Luau runner).
 - The optional `gethui()` path is guarded; standard Roblox uses `CoreGui`.
 - Rendering, mouse/touch input, and Roblox instance behavior require an
-  in-engine client test. Local static Luau compilation passed.
+  in-engine client test. The repository test covers parsing and a Roblox-shaped
+  runtime smoke test, not actual rendering.
 - Theme changes apply to newly created windows; existing windows keep their
   colors to avoid rebuilding live controls.
+
+## Troubleshooting remote loading
+
+- **HTTP failure:** verify the URL, repository visibility, branch name, and
+  that the runtime permits outbound HTTP requests. Try opening the raw URL in a
+  browser to confirm the file is published.
+- **`loadstring` is nil:** the current runtime does not enable dynamic code
+  loading. Use the ModuleScript integration instead; the library cannot enable
+  this capability itself.
+- **Compilation error:** ensure the fetched response is the contents of
+  `Draco.lua`, not an HTML error page. Rebuild with
+  `python3 tools/build_distribution.py` and run the verifier.
+- **Initialization error:** check the runtime is a Roblox client and that the
+  required services (`Players`, `TweenService`, `TextService`, `RunService`,
+  and `UserInputService`) are available. Loading returns the API only; call
+  `Draco:CreateWindow(...)` afterward.
+- **Duplicate windows after reload:** call `Window:Destroy()` before manually
+  reloading old code. `CreateWindow` also destroys the library's prior active
+  window and disconnects its tracked connections.

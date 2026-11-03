@@ -11,7 +11,33 @@ local UIS = game:GetService("UserInputService")
 
 local LP = Players.LocalPlayer
 
-local DracoUI = {}
+local DracoUI = {
+    Name = "Draco UI Lib",
+    Version = "1.0.0",
+    IsDracoUI = true,
+}
+
+-- Keep the active window discoverable across separate loadstring evaluations.
+-- A remote script is evaluated again on every reload, so a module-local
+-- reference alone cannot disconnect the previous load's input connections.
+local GLOBAL_STATE_KEY = "__DracoUI_LibraryState"
+local sharedState
+pcall(function()
+    -- Executor runtimes commonly expose getgenv(); getfenv() is the portable
+    -- Luau fallback. Both let separate loadstring chunks share this registry.
+    local environment
+    if type(getgenv) == "function" then
+        environment = getgenv()
+    else
+        environment = getfenv()
+    end
+    local state = rawget(environment, GLOBAL_STATE_KEY)
+    if type(state) ~= "table" then
+        state = {}
+        rawset(environment, GLOBAL_STATE_KEY, state)
+    end
+    sharedState = state
+end)
 
 local function cloneTable(source)
     local result = {}
@@ -1887,6 +1913,9 @@ local function createWindow(options)
         if DracoUI._ActiveWindow == self then
             DracoUI._ActiveWindow = nil
         end
+        if sharedState and sharedState.ActiveWindow == self then
+            sharedState.ActiveWindow = nil
+        end
     end
 
     function windowObject:PresetSheet(tab, api)
@@ -1911,8 +1940,20 @@ local function createWindow(options)
 end
 
 function DracoUI:CreateWindow(options)
+    if self._ActiveWindow then
+        self._ActiveWindow:Destroy()
+    end
+    if sharedState and sharedState.ActiveWindow then
+        pcall(function()
+            sharedState.ActiveWindow:Destroy()
+        end)
+        sharedState.ActiveWindow = nil
+    end
     local window = createWindow(options)
     self._ActiveWindow = window
+    if sharedState then
+        sharedState.ActiveWindow = window
+    end
     return window
 end
 
