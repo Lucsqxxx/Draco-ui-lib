@@ -220,28 +220,16 @@ existing window immediately. `Theme = "System"` checks supported Roblox UI
 theme attributes and falls back to `Mono` when the runtime does not expose a
 system preference.
 
-## Rebuilding the distribution
+## Publishing the distribution
 
-Edit `DracoUI.luau`, then regenerate and verify the committed artifact:
-
-```bash
-python3 tools/build_distribution.py
-python3 tools/test_distribution.py --luau /path/to/luau
-```
-
-The build embeds a SHA-256 fingerprint of the source. The verifier fails when
-`Draco.lua` is missing or stale and checks that the distribution has no local
-`require`/`script` dependency, has the expected source fingerprint, and returns
-the public API. `test_distribution.py` also compiles the artifact and runs a
-Roblox-shaped Luau smoke test for loading, window creation, callbacks, and
-reload cleanup. The smoke test does not replace an in-engine Roblox test.
-
-After the checks pass, publish the generated artifact together with its source
-and tooling. From the repository root:
+`Draco.lua` is the committed single-file artifact. After changing
+`DracoUI.luau`, regenerate that file with the same source-bundling process used
+for the release, verify it in a compatible Luau runtime, and publish both files.
+From the repository root:
 
 ```bash
-git add Draco.lua DracoUI.luau README.md tools
-git commit -m "feat: add loadstring distribution"
+git add Draco.lua DracoUI.luau README.md
+git commit -m "chore: update Draco distribution"
 git push origin main
 ```
 
@@ -291,8 +279,8 @@ installed in a Roblox place, the application's frontend can be replaced with
   loading. Use the ModuleScript integration instead; the library cannot enable
   this capability itself.
 - **Compilation error:** ensure the fetched response is the contents of
-  `Draco.lua`, not an HTML error page. Rebuild with
-  `python3 tools/build_distribution.py` and run the verifier.
+  `Draco.lua`, not an HTML error page. Confirm that the committed distribution
+  was regenerated from the current `DracoUI.luau` source.
 - **Initialization error:** check the runtime is a Roblox client and that the
   required services (`Players`, `TweenService`, `TextService`, `RunService`,
   and `UserInputService`) are available. Loading returns the API only; call
